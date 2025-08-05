@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Confirm Order</title>
+    <script src="https://js.stripe.com/v3/"></script>
+    <script src="https://www.paypal.com/sdk/js?client-id=YOUR_PAYPAL_CLIENT_ID"></script>
     <!-- Include your styles here -->
     <style>
         body {
@@ -91,7 +93,16 @@
         <div class="payment-option" onclick="selectPaymentOption('Apple Pay')">Apple Pay</div>
     </div>
 
+    <div id="payment-form" style="display: none; margin: 20px;">
+        <div id="card-element" class="payment-form"></div>
+        <div id="paypal-button-container"></div>
+        <div id="payment-error" style="color: red;"></div>
+        <button id="submit-payment" class="payment-button" style="margin-top: 20px; padding: 10px 20px; background-color: #3498db; color: white; border: none; border-radius: 5px; cursor: pointer;">Pay Now</button>
+    </div>
+
     <script>
+    // Initialize Stripe
+    const stripe = Stripe('YOUR_PUBLISHABLE_KEY');
         // Retrieve the cart and total from local storage
         const cart = JSON.parse(localStorage.getItem('cart')) || [];
         console.log('Retrieved Cart:', cart); // Log the retrieved cart data to the console
@@ -109,12 +120,67 @@
         totalBill.innerText = `Total Bill: $${total.toFixed(2)}`;
     
         // Function to handle the selection of payment options
-        function selectPaymentOption(option) {
+        async function selectPaymentOption(option) {
             const paymentOptions = document.querySelectorAll('.payment-option');
             paymentOptions.forEach((el) => el.classList.remove('selected'));
     
             // Use classList to add the 'selected' class to the clicked element
             event.target.classList.add('selected');
+
+            const paymentForm = document.getElementById('payment-form');
+            const cardElement = document.getElementById('card-element');
+            const paypalContainer = document.getElementById('paypal-button-container');
+
+            // Show payment form
+            paymentForm.style.display = 'block';
+
+            // Clear previous payment elements
+            cardElement.innerHTML = '';
+            paypalContainer.innerHTML = '';
+
+            try {
+                switch(option) {
+                    case 'Credit Card':
+                        const elements = stripe.elements();
+                        const card = elements.create('card');
+                        card.mount('#card-element');
+
+                        // Handle form submission
+                        document.getElementById('submit-payment').onclick = async () => {
+                            const {paymentMethod, error} = await stripe.createPaymentMethod('card', card);
+                            if (error) {
+                                document.getElementById('payment-error').textContent = error.message;
+                            } else {
+                                // Send to your server for processing
+                                console.log('Payment Method:', paymentMethod);
+                                confirmationMessage.innerText = 'Payment successful!';
+                            }
+                        };
+                        break;
+
+                    case 'PayPal':
+                        paypal.Buttons({
+                            createOrder: (data, actions) => {
+                                return actions.order.create({
+                                    purchase_units: [{
+                                        amount: {
+                                            value: total.toFixed(2)
+                                        }
+                                    }]
+                                });
+                            },
+                            onApprove: async (data, actions) => {
+                                await actions.order.capture();
+                                confirmationMessage.innerText = 'Payment successful!';
+                            }
+                        }).render('#paypal-button-container');
+                        break;
+
+                }
+            } catch (error) {
+                console.error('Payment error:', error);
+                document.getElementById('payment-error').textContent = 'Payment failed. Please try again.';
+            }
     
             // Display item details in the final bill as a table
             const tableHeader = '<tr><th>Item Name</th><th>Price</th></tr>';
@@ -131,8 +197,6 @@
         // Clear the cart after confirming the order
         localStorage.removeItem('cart');
     </script>
-    
-    
-    
+
 </body>
 </html>
